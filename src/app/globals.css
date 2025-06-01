@@ -1,26 +1,72 @@
-@import "tailwindcss";
+@import "tailwindcss"; /* Hvis du bruker Tailwind CSS i prosjektet ditt */
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* Definerer lyse temafarger (mindre relevant hvis body alltid har gradient) */
+  --background-light: #f0f2f5; /* En lys, nøytral grå */
+  --foreground-light: #1f2937; /* Mørk grå for tekst */
+
+  /* Definerer mørke temafarger */
+  --background-dark: #111827; /* Veldig mørk gråblå, nesten svart */
+  --foreground-dark: #e5e7eb; /* Lys grå for tekst */
+
+  /* Farger for gradienten som matcher det moderne glass-temaet */
+  --gradient-color-1: #222831; /* Hovedbakgrunnsfargen fra GoBoard3D */
+  --gradient-color-2: #393e46; /* En litt lysere, komplementær mørk farge */
+  --gradient-color-3: #00adb5; /* En aksentfarge (turkis/blågrønn) for litt liv */
+  --gradient-color-4: #1a202c; /* En annen mørk, dyp farge */
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+/* Setter standard tema til mørkt, da gradienten er mørk */
+body {
+  /* Bruker CSS-variabler for gradientfargene */
+  background: linear-gradient(
+    135deg,
+    var(--gradient-color-1),
+    var(--gradient-color-2),
+    var(--gradient-color-3),
+    var(--gradient-color-4)
+  );
+  background-size: 400% 400%; /* Større bakgrunnsstørrelse for jevnere animasjon */
+  animation: gradientShift 25s ease infinite; /* Litt lengre og mykere animasjon */
+  color: var(--foreground-dark); /* Standard tekstfarge for mørkt tema */
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+    Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji",
+    "Segoe UI Symbol"; /* Moderne font-stack */
+  min-height: 100vh; /* Sikrer at bakgrunnen dekker hele høyden */
+  margin: 0; /* Fjerner standard body margin */
+  overflow-x: hidden; /* Forhindrer horisontal scrolling */
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+/* Fallback for brukere som foretrekker redusert bevegelse */
+@media (prefers-reduced-motion: reduce) {
+  body {
+    animation: none; /* Deaktiver animasjon */
+    /* Vurder en statisk gradient eller en solid farge som fallback */
+    background: var(--gradient-color-1);
   }
 }
 
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+@keyframes gradientShift {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
 }
+
+/* Eksempel på hvordan du kan bruke de definerte forgrunnsfargene hvis du har en temabryter */
+/*
+.light-theme {
+  background: var(--background-light);
+  color: var(--foreground-light);
+}
+
+.dark-theme {
+  background: var(--background-dark); // Eller gradienten som satt på body
+  color: var(--foreground-dark);
+}
+*/

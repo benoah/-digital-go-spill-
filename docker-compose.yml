@@ -1,0 +1,50 @@
+services:
+  db:
+    image: postgres:15
+    container_name: go_game_db
+    restart: always
+    environment:
+      POSTGRES_USER: go_user
+      POSTGRES_PASSWORD: go_password
+      POSTGRES_DB: go_game_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # - ./db-init:/docker-entrypoint-initdb.d # Kan legges til hvis du trenger init-skript senere
+
+  webserver:
+    build:
+      context: . # Forteller Docker Compose at byggekonteksten er nåværende mappe
+      dockerfile: Dockerfile # Spesifiserer navnet på Dockerfilen
+    container_name: go_game_webserver
+    restart: always
+    ports:
+      - "3000:3000" # Port for Next.js appen
+      - "3001:3001" # Port for Socket.IO serveren (hvis den lytter separat)
+    environment:
+      # Miljøvariabler for Node.js appen inne i containeren
+      NODE_ENV: production
+      # DATABASE_URL for å koble til PostgreSQL-containeren.
+      # 'db' er navnet på databasetjenesten definert ovenfor. Docker Compose setter opp internt nettverk.
+      DATABASE_URL: postgresql://go_user:go_password@db:5432/go_game_db
+      # URL som klienten (nettleseren) bruker for å koble til Socket.IO.
+      # For lokal testing med Docker Compose, vil 'localhost:3001' vanligvis fungere
+      # fordi port 3001 på webserver-containeren er mappet til port 3001 på hosten.
+      NEXT_PUBLIC_SOCKET_SERVER_URL: http://localhost:3001
+      # Port som Socket.IO serveren internt i containeren skal lytte på
+      SOCKET_PORT: 3001
+      # Port som Next.js serveren internt i containeren skal lytte på (CMD i Dockerfile bruker npm start som igjen bruker 3000)
+      PORT: 3000
+    depends_on:
+      - db # Sørger for at databasetjenesten starter før webserveren
+    volumes:
+      # Disse volumene er nyttige for å unngå at lokal node_modules/ .next overskriver de i imaget
+      # hvis du skulle montere kildekoden for live-reloading (mer vanlig i dev-oppsett uten fullt image-bygg).
+      # For et rent image-basert oppsett som definert i Dockerfile, er disse strengt tatt ikke alltid nødvendig
+      # med mindre du har spesifikke grunner for det.
+      - /app/node_modules
+      - /app/.next
+
+volumes:
+  postgres_data: # Definerer det navngitte volumet for databasen
