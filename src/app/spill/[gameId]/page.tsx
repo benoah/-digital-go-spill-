@@ -103,9 +103,9 @@ export default function SpillPage() {
       return;
     }
 
-    const newSocket = io(
-      process.env.NEXT_PUBLIC_SOCKET_SERVER_URL || "http://localhost:3001"
-    );
+    const socketServerUrl = `http://${window.location.hostname}:3001`;
+    const newSocket = io(socketServerUrl);
+
     setSocket(newSocket);
 
     return () => {

@@ -10,7 +10,7 @@ const app = express();
 const httpServer = http.createServer(app);
 const io = new SocketIOServer(httpServer, {
   cors: {
-    origin: "http://localhost:3000",
+    origin: "*",
     methods: ["GET", "POST"],
   },
 });
@@ -91,6 +91,8 @@ const buildClientGameState = (
 io.on("connection", (socket: Socket) => {
   console.log(`🔌 Ny bruker koblet til: ${socket.id}`);
 
+  // I filen: server/socketServer.ts
+
   socket.on("joinGame", async (gameId: string) => {
     if (!gameId) {
       console.error(`[joinGame] Feilet for ${socket.id}: gameId mangler.`);
@@ -98,154 +100,78 @@ io.on("connection", (socket: Socket) => {
       return;
     }
 
-    socket.join(gameId);
-    // Lagre gameId på socket-objektet for enklere tilgang i disconnect-handleren
-    socket.data.gameId = gameId;
-    console.log(`[joinGame] Bruker ${socket.id} ble med i spillrom: ${gameId}`);
-
     try {
+      // Steg 1: Bli med i rommet og hent spillet fra databasen
+      socket.join(gameId);
+      socket.data.gameId = gameId;
+      console.log(
+        `[joinGame] Bruker ${socket.id} ble med i spillrom: ${gameId}`
+      );
+
       const gameResult = await query("SELECT * FROM games WHERE id = $1", [
         gameId,
       ]);
-      let game: Game | null = null;
-      let playerJustAdded = false;
+      let game: Game | null = parseDbGame(gameResult.rows[0]);
 
-      if (gameResult.rows.length > 0) {
-        game = parseDbGame(gameResult.rows[0]);
-        if (!game) {
-          console.error(
-            `[joinGame] Klarte ikke å parse spill ${gameId} fra DB.`
-          );
-          socket.emit("error", { message: "Feil ved henting av spilldata." });
-          return;
-        }
-        console.log(`[joinGame] Spill ${gameId} funnet i databasen.`);
-      } else {
+      // Steg 2: Opprett spillet hvis det ikke finnes
+      if (!game) {
         console.log(
-          `[joinGame] Oppretter nytt spill for gameId: ${gameId} i databasen.`
+          `[joinGame] Oppretter nytt spill for gameId: ${gameId} i DB.`
         );
-        const initialBoardState = createEmptyBoard();
-        const initialGameMessage = "Venter på spillere...";
         const newGameQuery = `
-          INSERT INTO games (id, board_state, current_player, status, game_message, players, ko_point, captured_by_black, captured_by_white, consecutive_passes, is_game_over, board_state_before_opponent_move)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-          RETURNING *;
-        `;
-        const newGameValues = [
+        INSERT INTO games (id, board_state, current_player, status, game_message, players)
+        VALUES ($1, $2, 1, 'waiting_for_players', 'Venter på spillere...', '[]')
+        RETURNING *;
+      `;
+        const newGameResult = await query(newGameQuery, [
           gameId,
-          JSON.stringify(initialBoardState),
-          1,
-          "waiting_for_players",
-          initialGameMessage,
-          JSON.stringify([]),
-          null,
-          0,
-          0,
-          0,
-          false,
-          null,
-        ];
-        const newGameResult = await query(newGameQuery, newGameValues);
+          JSON.stringify(createEmptyBoard()),
+        ]);
         game = parseDbGame(newGameResult.rows[0]);
-        if (!game) {
-          console.error(
-            `[joinGame] Klarte ikke å opprette spill ${gameId} i DB.`
-          );
-          socket.emit("error", {
-            message: "Feil ved oppretting av nytt spill.",
-          });
-          return;
-        }
       }
 
-      const existingPlayer = game.players.find(
-        (p: Player) => p.id === socket.id
-      );
-      let playersArrayUpdated = false;
+      if (!game) {
+        // Hvis spillet fortsatt er null, har noe gått alvorlig galt.
+        socket.emit("error", {
+          message: "Klarte ikke hente eller opprette spill.",
+        });
+        return;
+      }
 
-      if (!existingPlayer && game.players.length < 2) {
+      // Steg 3: Legg til den nye spilleren hvis det er plass og de ikke allerede er med
+      const isAlreadyPlayer = game.players.some((p) => p.id === socket.id);
+      if (!isAlreadyPlayer && game.players.length < 2) {
         const playerNumber = (game.players.length + 1) as 1 | 2;
         game.players.push({ id: socket.id, playerNumber });
-        playersArrayUpdated = true;
-        playerJustAdded = true;
-      } else if (existingPlayer) {
-        console.log(
-          `[joinGame] Spiller ${socket.id} er allerede i spill ${gameId}.`
-        );
-      } else {
-        console.log(
-          `[joinGame] Bruker ${socket.id} er tilskuer for spill ${gameId} (spillet er fullt).`
-        );
-      }
 
-      if (playersArrayUpdated) {
-        const playerInfo = game.players.find(
-          (p) => p.id === socket.id
-        ) as Player;
-        console.log(
-          `[joinGame] Bruker ${socket.id} (Spiller ${playerInfo.playerNumber}) lagt til/oppdatert i spill ${gameId}. Oppdaterer DB.`
-        );
-        let newStatus = game.status;
-        let newGameMessage = game.gameMessage;
-
-        if (
-          game.players.length === 2 &&
-          game.status === "waiting_for_players"
-        ) {
-          newStatus = "in_progress";
-          newGameMessage = `Spillet er i gang! Spiller ${
-            game.currentPlayer === 1 ? "Svart" : "Hvit"
-          } begynner.`;
-        } else if (
-          game.players.length === 1 &&
-          game.status === "waiting_for_players"
-        ) {
-          newGameMessage = "Venter på motstander...";
+        // Oppdater status og melding basert på antall spillere
+        if (game.players.length === 1) {
+          game.status = "waiting_for_players";
+          game.gameMessage = "Venter på motstander...";
+        } else if (game.players.length === 2) {
+          game.status = "in_progress";
+          game.gameMessage = "Spillet er i gang! Spiller Svart begynner.";
         }
-        game.status = newStatus;
-        game.gameMessage = newGameMessage;
 
+        // Lagre den oppdaterte spillerlisten og statusen til databasen
         const updateQuery = `
-          UPDATE games 
-          SET players = $1, status = $2, game_message = $3, updated_at = NOW()
-          WHERE id = $4
-          RETURNING *;
-        `;
-        const updatedGameResult = await query(updateQuery, [
+        UPDATE games SET players = $1, status = $2, game_message = $3, updated_at = NOW()
+        WHERE id = $4 RETURNING *;
+      `;
+        const updatedResult = await query(updateQuery, [
           JSON.stringify(game.players),
           game.status,
           game.gameMessage,
           gameId,
         ]);
-        game = parseDbGame(updatedGameResult.rows[0]);
-        if (!game) {
-          console.error(
-            `[joinGame] Klarte ikke å oppdatere spill ${gameId} i DB etter spiller join.`
-          );
-          socket.emit("error", { message: "Feil ved oppdatering av spill." });
-          return;
-        }
+        game = parseDbGame(updatedResult.rows[0]); // Hent den endelige, autoritative tilstanden
       }
 
-      socket.emit("gameStateUpdate", buildClientGameState(game));
-
-      if (playerJustAdded) {
-        if (game.players.length < 2 && game.status === "waiting_for_players") {
-          io.to(gameId).emit("playerUpdate", {
-            players: game.players,
-            message: game.gameMessage,
-          });
-        } else if (game.players.length === 2 && game.status === "in_progress") {
-          console.log(
-            `[joinGame] Spill ${gameId} er klart! Sender gameStateUpdate til hele rommet.`
-          );
-          io.to(gameId).emit("gameStateUpdate", buildClientGameState(game));
-        }
-      } else if (
-        game.status === "in_progress" &&
-        game.players.length === 2 &&
-        game
-      ) {
+      // Steg 4: Send den endelige, komplette spilltilstanden til ALLE i rommet
+      if (game) {
+        console.log(
+          `[joinGame] Sender gameStateUpdate til rom ${gameId}. Spillere: ${game.players.length}, Status: ${game.status}`
+        );
         io.to(gameId).emit("gameStateUpdate", buildClientGameState(game));
       }
     } catch (error) {
@@ -253,9 +179,7 @@ io.on("connection", (socket: Socket) => {
         `[joinGame] Databasefeil for ${gameId} (socket ${socket.id}):`,
         error
       );
-      socket.emit("error", {
-        message: "En serverfeil oppstod under tilkobling til spillet.",
-      });
+      socket.emit("error", { message: "En serverfeil oppstod." });
     }
   });
 
