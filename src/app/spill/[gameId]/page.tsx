@@ -106,6 +106,8 @@ export default function SpillPage() {
     const socketServerUrl = `http://${window.location.hostname}:3001`;
     const newSocket = io(socketServerUrl);
 
+    setSocket(newSocket);
+
     return () => {
       console.log("Kobler fra socket ved demontering av SpillPage");
       newSocket.disconnect();
