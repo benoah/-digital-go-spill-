@@ -8,6 +8,7 @@ import { query, testDbConnection } from "./lib/db";
 
 const app = express();
 const httpServer = http.createServer(app);
+
 const io = new SocketIOServer(httpServer, {
   cors: {
     origin: "*",
@@ -611,10 +612,10 @@ io.on("connection", (socket: Socket) => {
   });
 });
 
-const PORT = process.env.SOCKET_PORT || 3001;
-httpServer.listen(PORT, () => {
+const PORT = parseInt(process.env.SOCKET_PORT || "3001", 10);
+httpServer.listen(PORT, "0.0.0.0", () => {
   console.log("----------------------------------------------------");
-  console.log(`🚀 Socket.IO server kjører på http://localhost:${PORT}`);
+  console.log(`🚀 Socket.IO server kjører på http://0.0.0.0:${PORT}`);
   console.log("----------------------------------------------------");
   console.log("   Venter på tilkoblinger fra klienter...");
   console.log("----------------------------------------------------");
