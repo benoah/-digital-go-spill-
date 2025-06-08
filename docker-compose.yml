@@ -31,7 +31,6 @@ services:
       # URL som klienten (nettleseren) bruker for å koble til Socket.IO.
       # For lokal testing med Docker Compose, vil 'localhost:3001' vanligvis fungere
       # fordi port 3001 på webserver-containeren er mappet til port 3001 på hosten.
-      NEXT_PUBLIC_SOCKET_SERVER_URL: http://localhost:3001
       # Port som Socket.IO serveren internt i containeren skal lytte på
       SOCKET_PORT: 3001
       # Port som Next.js serveren internt i containeren skal lytte på (CMD i Dockerfile bruker npm start som igjen bruker 3000)
