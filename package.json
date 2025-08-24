@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "next dev -H 0.0.0.0 -p 3000",
     "build": "next build",
-    "start": "next start -H 0.0.0.0 -p 3000",
+    "start": "concurrently -k -s first --names NEXT,SOCKET \"next start -H 0.0.0.0 -p $PORT\" \"tsx server/socketServer.js\"",
     "lint": "next lint",
     "server:dev": "tsx watch server/socketServer.js",
     "server:start": "tsx server/socketServer.js"
